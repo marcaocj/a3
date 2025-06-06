@@ -42,7 +42,7 @@ public class EnemyAI : MonoBehaviour
     public GameObject alertIcon;
     public Color idleColor = Color.green;
     public Color alertColor = Color.yellow;
-    public Color aggroColor = new Color(1f, 0.5f, 0f, 1f); // Orange equivalente
+    public Color aggroColor = new Color(1f, 0.5f, 0f, 1f);
     public Color combatColor = Color.red;
     
     [Header("Audio")]
@@ -69,7 +69,6 @@ public class EnemyAI : MonoBehaviour
     private float lastAttackTime;
     private float lastStateChangeTime;
     private float combatTimer;
-    // CORREÇÃO: Removidos campos não utilizados
     private bool isDead = false;
     
     // Coroutines
@@ -112,13 +111,21 @@ public class EnemyAI : MonoBehaviour
             mainCollider = GetComponent<Collider>();
             
         if (audioSource == null)
+        {
             audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+            }
+        }
             
         enemyStats = GetComponent<EnemyStats>();
-        enemyRenderer = GetComponent<Renderer>();
+        enemyRenderer = GetComponentInChildren<Renderer>();
+        if (enemyRenderer == null)
+            enemyRenderer = GetComponent<Renderer>();
         
         // Find player
-        GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
+        GameObject playerObj = FindPlayerObject();
         if (playerObj != null)
         {
             player = playerObj.transform;
@@ -134,6 +141,24 @@ public class EnemyAI : MonoBehaviour
         }
         
         startPosition = transform.position;
+    }
+    
+    private GameObject FindPlayerObject()
+    {
+        // Tentar múltiplas maneiras de encontrar o player
+        GameObject player = GameObject.FindWithTag("Player");
+        if (player != null) return player;
+        
+        // Se não encontrou por tag, tentar pelo GameManager
+        if (GameManager.Instance != null && GameManager.Instance.CurrentPlayer != null)
+            return GameManager.Instance.CurrentPlayer;
+        
+        // Se ainda não encontrou, procurar por PlayerStats
+        PlayerStats playerStats = FindFirstObjectByType<PlayerStats>();
+        if (playerStats != null)
+            return playerStats.gameObject;
+        
+        return null;
     }
     
     private void SetupInitialState()
@@ -156,6 +181,17 @@ public class EnemyAI : MonoBehaviour
     private void Update()
     {
         if (isDead) return;
+        
+        // Revalidar player se perdeu a referência
+        if (player == null)
+        {
+            GameObject playerObj = FindPlayerObject();
+            if (playerObj != null)
+            {
+                player = playerObj.transform;
+                playerStats = playerObj.GetComponent<PlayerStats>();
+            }
+        }
         
         CheckForPlayer();
         UpdateCurrentState();
@@ -222,6 +258,12 @@ public class EnemyAI : MonoBehaviour
                         ChangeState(AIState.Search);
                     }
                 }
+                
+                // Check flee condition
+                if (shouldFlee && enemyStats != null && enemyStats.HealthPercentage <= fleeHealthThreshold)
+                {
+                    ChangeState(AIState.Return);
+                }
                 break;
                 
             case AIState.Search:
@@ -242,7 +284,8 @@ public class EnemyAI : MonoBehaviour
         
         // Raycast to check for obstacles
         RaycastHit hit;
-        if (Physics.Raycast(transform.position + Vector3.up * 0.5f, directionToPlayer, out hit, distanceToPlayer))
+        Vector3 rayStart = transform.position + Vector3.up * 0.5f;
+        if (Physics.Raycast(rayStart, directionToPlayer, out hit, distanceToPlayer))
         {
             return hit.collider.CompareTag("Player");
         }
@@ -310,7 +353,7 @@ public class EnemyAI : MonoBehaviour
         if (lookDirection != Vector3.zero)
         {
             Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime / 60f);
         }
         
         // Wait for a moment before chasing
@@ -346,7 +389,7 @@ public class EnemyAI : MonoBehaviour
         if (lookDirection != Vector3.zero)
         {
             Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime / 60f);
         }
         
         // Attack logic
@@ -406,7 +449,7 @@ public class EnemyAI : MonoBehaviour
         {
             Transform targetPoint = patrolPoints[currentPatrolIndex];
             
-            if (navAgent != null && navAgent.enabled)
+            if (navAgent != null && navAgent.enabled && targetPoint != null)
             {
                 navAgent.isStopped = false;
                 navAgent.speed = moveSpeed;
@@ -431,6 +474,10 @@ public class EnemyAI : MonoBehaviour
                 {
                     currentPatrolIndex = (currentPatrolIndex + 1) % patrolPoints.Count;
                 }
+            }
+            else
+            {
+                yield break;
             }
         }
         
@@ -693,7 +740,33 @@ public class EnemyAI : MonoBehaviour
         // Enter combat state if damaged
         if (currentState != AIState.Combat && currentState != AIState.Dead)
         {
+            lastKnownPlayerPosition = damagePosition;
             ChangeState(AIState.Combat);
+        }
+        
+        // Call for help if enabled
+        if (canCallForHelp)
+        {
+            CallForHelp();
+        }
+    }
+    
+    private void CallForHelp()
+    {
+        // Find nearby enemies and alert them
+        Collider[] nearbyEnemies = Physics.OverlapSphere(transform.position, detectionRange * 2f);
+        
+        foreach (Collider col in nearbyEnemies)
+        {
+            EnemyAI otherEnemy = col.GetComponent<EnemyAI>();
+            if (otherEnemy != null && otherEnemy != this && !otherEnemy.isDead)
+            {
+                if (otherEnemy.currentState == AIState.Idle || otherEnemy.currentState == AIState.Patrol)
+                {
+                    otherEnemy.lastKnownPlayerPosition = player != null ? player.position : transform.position;
+                    otherEnemy.ChangeState(AIState.Alert);
+                }
+            }
         }
     }
     
@@ -749,6 +822,13 @@ public class EnemyAI : MonoBehaviour
             {
                 Gizmos.DrawLine(patrolPoints[patrolPoints.Count - 1].position, patrolPoints[0].position);
             }
+        }
+        
+        // Line of sight to player
+        if (player != null)
+        {
+            Gizmos.color = CanSeePlayer() ? Color.green : Color.red;
+            Gizmos.DrawLine(transform.position + Vector3.up * 0.5f, player.position + Vector3.up * 0.5f);
         }
     }
 }
