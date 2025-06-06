@@ -75,7 +75,7 @@ public class QuestManager : Singleton<QuestManager>
     
     private void SetupEventListeners()
     {
-        // CORREÇÃO: Usar EventManager diretamente (métodos estáticos)
+        // Usar EventManager diretamente (métodos estáticos)
         EventManager.OnEnemyKilled += HandleEnemyKilled;
         EventManager.OnItemCollected += HandleItemCollected;
         EventManager.OnItemDelivered += HandleItemDelivered;
@@ -345,7 +345,6 @@ public class QuestManager : Singleton<QuestManager>
         return completedQuests.Count;
     }
     
-    // CORREÇÃO: Método para obter estatísticas de quests
     public QuestStatistics GetQuestStatistics()
     {
         return new QuestStatistics
@@ -362,12 +361,29 @@ public class QuestManager : Singleton<QuestManager>
     {
         if (!showQuestNotifications || questNotificationPrefab == null) return;
         
-        GameObject notification = Instantiate(questNotificationPrefab, questNotificationParent);
+        GameObject notification = null;
+        
+        if (questNotificationParent != null)
+        {
+            notification = Instantiate(questNotificationPrefab, questNotificationParent);
+        }
+        else
+        {
+            notification = Instantiate(questNotificationPrefab);
+        }
+        
         QuestNotification notificationComponent = notification.GetComponent<QuestNotification>();
         
         if (notificationComponent != null)
         {
             notificationComponent.ShowNotification(message, type);
+        }
+        else
+        {
+            Debug.LogWarning("QuestNotification component não encontrado no prefab!");
+            // Fallback: apenas log da notificação
+            Debug.Log($"[Quest Notification] {type}: {message}");
+            if (notification != null) Destroy(notification);
         }
     }
     
@@ -385,7 +401,6 @@ public class QuestManager : Singleton<QuestManager>
         if (questLogUI != null)
         {
             questLogUI.SetActive(true);
-            // CORREÇÃO: Usar EventManager diretamente
             EventManager.TriggerUIOpened("QuestLog");
         }
     }
@@ -395,7 +410,6 @@ public class QuestManager : Singleton<QuestManager>
         if (questLogUI != null)
         {
             questLogUI.SetActive(false);
-            // CORREÇÃO: Usar EventManager diretamente
             EventManager.TriggerUIClosed("QuestLog");
         }
     }
@@ -503,7 +517,6 @@ public class QuestManager : Singleton<QuestManager>
         public Dictionary<string, Dictionary<string, object>> questData = new Dictionary<string, Dictionary<string, object>>();
     }
     
-    // ADIÇÃO: Estrutura para estatísticas de quest
     [System.Serializable]
     public class QuestStatistics
     {
@@ -516,7 +529,6 @@ public class QuestManager : Singleton<QuestManager>
     // Cleanup
     protected override void OnDestroy()
     {
-        // CORREÇÃO: Usar EventManager diretamente
         EventManager.OnEnemyKilled -= HandleEnemyKilled;
         EventManager.OnItemCollected -= HandleItemCollected;
         EventManager.OnItemDelivered -= HandleItemDelivered;
