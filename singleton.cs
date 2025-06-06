@@ -47,7 +47,7 @@ public abstract class Singleton<T> : MonoBehaviour where T : MonoBehaviour
     /// <summary>
     /// Verifica se existe uma instância do singleton
     /// </summary>
-    public static bool HasInstance => instance != null;
+    public static bool HasInstance => instance != null && !applicationIsQuitting;
     
     /// <summary>
     /// Inicialização do singleton
@@ -160,31 +160,3 @@ public abstract class Singleton<T> : MonoBehaviour where T : MonoBehaviour
         }
     }
 }
-
-// Exemplo de uso:
-/*
-public class GameManager : Singleton<GameManager>
-{
-    [Header("Game Settings")]
-    public float gameSpeed = 1f;
-    
-    protected override void OnSingletonAwake()
-    {
-        // Inicialização específica do GameManager
-        Debug.Log("GameManager inicializado!");
-    }
-    
-    protected override bool ShouldPersistAcrossScenes()
-    {
-        return true; // GameManager deve persistir entre cenas
-    }
-    
-    public void StartGame()
-    {
-        // Lógica do jogo...
-    }
-}
-
-// Para usar em outros scripts:
-// GameManager.Instance.StartGame();
-*/
