@@ -24,8 +24,8 @@ public class PlayerController : MonoBehaviour
     public LayerMask mouseTargetLayer = 1;
     
     [Header("Status Effects")]
-    public bool isStunned = false;
-    public bool isSilenced = false;
+    [SerializeField] private bool isStunned = false;
+    [SerializeField] private bool isSilenced = false;
     
     // Componentes
     private CharacterController characterController;
@@ -329,6 +329,12 @@ public class PlayerController : MonoBehaviour
         if (isGrounded && !isStunned)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            
+            // Trigger animação de pulo
+            if (animationController != null)
+            {
+                animationController.TriggerJump();
+            }
         }
     }
     
@@ -342,6 +348,14 @@ public class PlayerController : MonoBehaviour
         if (hit.gameObject.CompareTag("Interactable"))
         {
             // Lógica de interação pode ser adicionada aqui
+        }
+        
+        // Empurrar objetos Rigidbody
+        Rigidbody body = hit.collider.attachedRigidbody;
+        if (body != null && !body.isKinematic && body.mass < 50f)
+        {
+            Vector3 pushDirection = new Vector3(hit.moveDirection.x, 0, hit.moveDirection.z);
+            body.linearVelocity = pushDirection * 3f;
         }
     }
     
