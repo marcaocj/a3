@@ -4,7 +4,7 @@ using System.Collections.Generic;
 /// <summary>
 /// Gerencia todas as estatísticas do jogador (vida, mana, atributos, etc.)
 /// </summary>
-public class PlayerStats : Singleton<PlayerStats>
+public class PlayerStats : MonoBehaviour
 {
     [Header("Base Stats")]
     public int level = 1;
@@ -50,15 +50,15 @@ public class PlayerStats : Singleton<PlayerStats>
     private List<StatModifier> activeModifiers = new List<StatModifier>();
     
     // Propriedades calculadas (stats finais)
-    public int FinalStrength => strength + GetEquipmentBonus("strength") + GetModifierBonus("strength");
-    public int FinalDexterity => dexterity + GetEquipmentBonus("dexterity") + GetModifierBonus("dexterity");
-    public int FinalIntelligence => intelligence + GetEquipmentBonus("intelligence") + GetModifierBonus("intelligence");
-    public int FinalVitality => vitality + GetEquipmentBonus("vitality") + GetModifierBonus("vitality");
+    public int FinalStrength => Mathf.RoundToInt(strength + GetEquipmentBonus("strength") + GetModifierBonus("strength"));
+    public int FinalDexterity => Mathf.RoundToInt(dexterity + GetEquipmentBonus("dexterity") + GetModifierBonus("dexterity"));
+    public int FinalIntelligence => Mathf.RoundToInt(intelligence + GetEquipmentBonus("intelligence") + GetModifierBonus("intelligence"));
+    public int FinalVitality => Mathf.RoundToInt(vitality + GetEquipmentBonus("vitality") + GetModifierBonus("vitality"));
     
     public float FinalMaxHealth => CalculateMaxHealth();
     public float FinalMaxMana => CalculateMaxMana();
-    public int FinalDamage => damage + GetEquipmentBonus("damage") + GetModifierBonus("damage");
-    public int FinalArmor => armor + GetEquipmentBonus("armor") + GetModifierBonus("armor");
+    public int FinalDamage => Mathf.RoundToInt(damage + GetEquipmentBonus("damage") + GetModifierBonus("damage"));
+    public int FinalArmor => Mathf.RoundToInt(armor + GetEquipmentBonus("armor") + GetModifierBonus("armor"));
     public float FinalCriticalChance => criticalChance + GetEquipmentBonus("criticalChance") + GetModifierBonus("criticalChance");
     public float FinalCriticalDamage => criticalDamage + GetEquipmentBonus("criticalDamage") + GetModifierBonus("criticalDamage");
     public float FinalAttackSpeed => attackSpeed + (GetEquipmentBonus("attackSpeed") + GetModifierBonus("attackSpeed")) / 100f;
@@ -75,9 +75,31 @@ public class PlayerStats : Singleton<PlayerStats>
     public System.Action OnStatsChanged;
     public System.Action OnLevelUp;
     
-    protected override void Awake()
+    // Singleton instance
+    private static PlayerStats _instance;
+    public static PlayerStats Instance
     {
-        base.Awake();
+        get
+        {
+            if (_instance == null)
+            {
+                _instance = FindFirstObjectByType<PlayerStats>();
+            }
+            return _instance;
+        }
+    }
+    
+    private void Awake()
+    {
+        if (_instance == null)
+        {
+            _instance = this;
+        }
+        else if (_instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
     }
     
     private void Start()
@@ -298,9 +320,9 @@ public class PlayerStats : Singleton<PlayerStats>
         AddEquipmentBonus(statName, -bonus);
     }
     
-    public int GetEquipmentBonus(string statName)
+    public float GetEquipmentBonus(string statName)
     {
-        return equipmentBonuses.ContainsKey(statName) ? Mathf.RoundToInt(equipmentBonuses[statName]) : 0;
+        return equipmentBonuses.ContainsKey(statName) ? equipmentBonuses[statName] : 0f;
     }
     
     #endregion
@@ -331,18 +353,24 @@ public class PlayerStats : Singleton<PlayerStats>
     private void UpdateModifiers()
     {
         // Remover modifiers expirados
+        bool removedAny = false;
         for (int i = activeModifiers.Count - 1; i >= 0; i--)
         {
             if (activeModifiers[i].HasExpired())
             {
                 activeModifiers.RemoveAt(i);
-                RecalculateStats();
-                OnStatsChanged?.Invoke();
+                removedAny = true;
             }
+        }
+        
+        if (removedAny)
+        {
+            RecalculateStats();
+            OnStatsChanged?.Invoke();
         }
     }
     
-    private int GetModifierBonus(string statName)
+    private float GetModifierBonus(string statName)
     {
         float totalBonus = 0f;
         
@@ -354,7 +382,7 @@ public class PlayerStats : Singleton<PlayerStats>
             }
         }
         
-        return Mathf.RoundToInt(totalBonus);
+        return totalBonus;
     }
     
     #endregion
@@ -368,13 +396,13 @@ public class PlayerStats : Singleton<PlayerStats>
         float newMaxMana = FinalMaxMana;
         
         // Ajustar vida e mana atuais proporcionalmente
-        if (maxHealth > 0)
+        if (maxHealth > 0 && currentHealth > 0)
         {
             float healthRatio = currentHealth / maxHealth;
             currentHealth = newMaxHealth * healthRatio;
         }
         
-        if (maxMana > 0)
+        if (maxMana > 0 && currentMana > 0)
         {
             float manaRatio = currentMana / maxMana;
             currentMana = newMaxMana * manaRatio;
@@ -423,6 +451,14 @@ public class PlayerStats : Singleton<PlayerStats>
     public bool IsAtFullMana => currentMana >= FinalMaxMana;
     
     #endregion
+    
+    private void OnDestroy()
+    {
+        if (_instance == this)
+        {
+            _instance = null;
+        }
+    }
 }
 
 /// <summary>
