@@ -44,9 +44,8 @@ public class GameManager : Singleton<GameManager>
     // Public property for CurrentPlayer
     public GameObject CurrentPlayer => currentPlayer;
     
-    protected override void Awake()
+    protected override void OnSingletonAwake()
     {
-        base.Awake();
         InitializeGame();
     }
     
@@ -72,6 +71,21 @@ public class GameManager : Singleton<GameManager>
         if (mainCamera == null)
         {
             mainCamera = Camera.main;
+            if (mainCamera == null)
+            {
+                // Criar câmera se não existir
+                GameObject cameraObj = new GameObject("Main Camera");
+                mainCamera = cameraObj.AddComponent<Camera>();
+                cameraObj.tag = "MainCamera";
+            }
+        }
+        
+        // Configurar spawn point se não definido
+        if (playerSpawnPoint == null)
+        {
+            GameObject spawnPoint = new GameObject("PlayerSpawnPoint");
+            spawnPoint.transform.position = Vector3.zero;
+            playerSpawnPoint = spawnPoint.transform;
         }
     }
     
@@ -165,6 +179,12 @@ public class GameManager : Singleton<GameManager>
         isPaused = false;
         
         PlayMusic(mainMenuMusic);
+        
+        // Esconder UI de gameplay se existir
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowMainMenu();
+        }
     }
     
     private void HandlePlayingState()
@@ -174,10 +194,20 @@ public class GameManager : Singleton<GameManager>
         
         PlayMusic(gameplayMusic);
         
+        // Mostrar UI de gameplay
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowGameplayUI();
+        }
+        
         // Configurar câmera se necessário
         if (cameraController == null && currentPlayer != null)
         {
             cameraController = FindFirstObjectByType<CameraController>();
+            if (cameraController != null)
+            {
+                cameraController.SetTarget(currentPlayer.transform);
+            }
         }
     }
     
@@ -189,10 +219,13 @@ public class GameManager : Singleton<GameManager>
     
     private void HandleGameOverState()
     {
-        Time.timeScale = 0f;
+        Time.timeScale = 0.1f; // Slow motion para efeito dramático
         isPaused = true;
         
         PlayMusic(gameOverMusic);
+        
+        // Mostrar tela de game over após delay
+        StartCoroutine(ShowGameOverAfterDelay(2f));
     }
     
     private void HandleVictoryState()
@@ -201,12 +234,34 @@ public class GameManager : Singleton<GameManager>
         isPaused = true;
         
         PlayMusic(victoryMusic);
+        
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowVictoryScreen();
+        }
     }
     
     private void HandleLoadingState()
     {
         // Manter time scale normal durante loading
         Time.timeScale = 1f;
+        
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowLoadingScreen();
+        }
+    }
+    
+    private IEnumerator ShowGameOverAfterDelay(float delay)
+    {
+        yield return new WaitForSecondsRealtime(delay);
+        
+        Time.timeScale = 0f;
+        
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.ShowGameOverScreen();
+        }
     }
     
     private void PlayMusic(AudioClip musicClip)
@@ -252,10 +307,29 @@ public class GameManager : Singleton<GameManager>
             currentPlayer = Instantiate(playerPrefab, playerSpawnPoint.position, playerSpawnPoint.rotation);
             
             // Configurar câmera para seguir o player
+            if (cameraController == null)
+            {
+                cameraController = FindFirstObjectByType<CameraController>();
+            }
+            
             if (cameraController != null)
             {
                 cameraController.SetTarget(currentPlayer.transform);
             }
+            
+            // Configurar UI para o novo player
+            if (UIManager.Instance != null && UIManager.Instance.healthBarUI != null)
+            {
+                PlayerStats playerStats = currentPlayer.GetComponent<PlayerStats>();
+                if (playerStats != null)
+                {
+                    UIManager.Instance.healthBarUI.SetPlayer(playerStats);
+                }
+            }
+        }
+        else
+        {
+            Debug.LogError("PlayerPrefab ou PlayerSpawnPoint não configurados!");
         }
     }
     
@@ -327,6 +401,12 @@ public class GameManager : Singleton<GameManager>
     
     public void QuitGame()
     {
+        // Salvar jogo antes de sair
+        if (SaveManager.Instance != null)
+        {
+            SaveManager.Instance.SaveSettings();
+        }
+        
         #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
         #else
